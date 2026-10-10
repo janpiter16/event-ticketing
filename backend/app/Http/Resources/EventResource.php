@@ -38,6 +38,7 @@ class EventResource extends JsonResource
             ]),
             'category' => new EventCategoryResource($this->whenLoaded('category')),
             'ticket_types' => $this->whenLoaded('ticketTypes'),
+            'tickets_sold' => $this->when(isset($this->issued_tickets_count), $this->issued_tickets_count),
         ];
     }
 }

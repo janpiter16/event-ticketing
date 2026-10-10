@@ -20,7 +20,7 @@ class EventController extends Controller
 
         Gate::authorize('viewAny', Event::class);
 
-        $query = Event::with(['category', 'organizer']);
+        $query = Event::with(['category', 'organizer'])->withCount('issuedTickets');
 
         if ($request->user()->hasRole('organizer')) {
             $query->where('organizer_id', $request->user()->id);
@@ -85,6 +85,22 @@ class EventController extends Controller
         Gate::authorize('view', $event);
 
         return new EventResource($event->load(['category', 'organizer', 'ticketTypes']));
+    }
+
+    public function publicShow($id)
+    {
+        $event = Event::published()
+            ->with(['category', 'organizer', 'ticketTypes'])
+            ->where(function ($query) use ($id) {
+                if (is_numeric($id)) {
+                    $query->where('id', (int) $id)->orWhere('slug', $id);
+                } else {
+                    $query->where('slug', $id);
+                }
+            })
+            ->firstOrFail();
+
+        return new EventResource($event);
     }
 
     public function update(EventRequest $request, Event $event)
@@ -185,5 +201,45 @@ class EventController extends Controller
             && $event->start_at
             && $event->end_at
             && $event->ticketTypes()->count() > 0;
+    }
+
+    public function exportAttendees(Request $request, Event $event)
+    {
+        // Must be the organizer or admin
+        if ($event->organizer_id !== $request->user()->id && !$request->user()->hasRole('super-admin')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $tickets = \App\Models\IssuedTicket::with('ticketType')
+            ->where('event_id', $event->id)
+            ->get();
+
+        $csvFileName = 'attendees_' . $event->slug . '_' . date('Ymd_His') . '.csv';
+        $headers = [
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$csvFileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        ];
+
+        $callback = function () use ($tickets) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, ['Ticket Number', 'Participant Name', 'Participant Email', 'Ticket Type', 'Status', 'Checked In At']);
+
+            foreach ($tickets as $ticket) {
+                fputcsv($file, [
+                    $ticket->ticket_number,
+                    $ticket->participant_name,
+                    $ticket->participant_email,
+                    $ticket->ticketType->name ?? 'N/A',
+                    $ticket->status,
+                    $ticket->checked_in_at ? \Carbon\Carbon::parse($ticket->checked_in_at)->format('Y-m-d H:i:s') : 'Not Checked In'
+                ]);
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 }

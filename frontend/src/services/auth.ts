@@ -1,12 +1,5 @@
-import api from '../services/api';
-
-export interface User {
-  id: number;
-  name: string;
-  email: string;
-  roles: Array<{ id: number; name: string; slug: string }>;
-  organizer_profile?: any;
-}
+import api from './api';
+import { User } from '../types';
 
 export interface AuthResponse {
   success: boolean;
@@ -29,4 +22,10 @@ export const authService = {
 
   logout: (): Promise<{ success: boolean; message: string }> =>
     api.post('/auth/logout'),
+
+  forgotPassword: (data: { email: string }): Promise<{ success: boolean; message: string }> =>
+    api.post('/auth/forgot-password', data),
+
+  resetPassword: (data: Record<string, string>): Promise<{ success: boolean; message: string }> =>
+    api.post('/auth/reset-password', data),
 };

@@ -8,7 +8,11 @@ class EventRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        if ($event = $this->route('event')) {
+            return $this->user()?->can('update', $event) ?? false;
+        }
+
+        return $this->user()?->can('create', \App\Models\Event::class) ?? false;
     }
 
     public function rules(): array
